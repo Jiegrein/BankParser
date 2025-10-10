@@ -5,11 +5,10 @@ Claude (Anthropic) service implementation
 from typing import List, Dict, Any
 # import anthropic  # Uncomment when adding Claude dependency
 from app.models import BankStatement
-from .interface import LLMServiceInterface
-from .openai_service import OpenAIService  # For reusing prompt
+from .base import BaseLLMService
 
 
-class ClaudeService(LLMServiceInterface):
+class ClaudeService(BaseLLMService):
     """Claude (Anthropic) service implementation"""
     
     def __init__(self):
@@ -52,6 +51,4 @@ class ClaudeService(LLMServiceInterface):
             "Claude 3 supports vision - implement similar to OpenAI vision"
         )
     
-    def _get_parsing_prompt(self) -> str:
-        """Reuse the same prompt as OpenAI for consistency"""
-        return OpenAIService()._get_parsing_prompt()
+    # Inherits shared _get_parsing_prompt and JSON helpers from BaseLLMService

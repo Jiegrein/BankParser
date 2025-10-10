@@ -5,11 +5,10 @@ Google Gemini service implementation
 from typing import List
 # import google.generativeai as genai  # Uncomment when adding Gemini
 from app.models import BankStatement
-from .interface import LLMServiceInterface
-from .openai_service import OpenAIService  # For reusing prompt
+from .base import BaseLLMService
 
 
-class GeminiService(LLMServiceInterface):
+class GeminiService(BaseLLMService):
     """Google Gemini service implementation"""
     
     def __init__(self):
@@ -60,6 +59,4 @@ class GeminiService(LLMServiceInterface):
             "Gemini Pro Vision supports image analysis"
         )
     
-    def _get_parsing_prompt(self) -> str:
-        """Reuse the same prompt as OpenAI for consistency"""
-        return OpenAIService()._get_parsing_prompt()
+    # Inherits shared _get_parsing_prompt and JSON helpers from BaseLLMService
