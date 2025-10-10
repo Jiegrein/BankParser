@@ -71,6 +71,61 @@ class OpenAIService(BaseLLMService):
 
     async def _single_text_call(self, text_content: str, next_page_hint: str | None) -> Dict[str, Any]:
         model_name = self.settings.llm_model_name.replace("-vision-preview", "")
+
+        if self._is_gpt5_family(model_name):
+            # GPT-5 uses the Responses API with different structure
+            system_prompt = self._get_parsing_prompt()
+            user_prompt = (
+                f"Parse this bank statement:\n\n{text_content}" if not next_page_hint else
+                f"Continue parsing this bank statement starting from: {next_page_hint}\n\n{text_content}"
+            )
+            # Combine system and user prompts
+            combined_input = f"{system_prompt}\n\n{user_prompt}"
+
+            response = self.client.responses.create(
+                model=model_name,
+                input=[
+                    {
+                        "type": "message",
+                        "role": "user",
+                        "content": combined_input
+                    }
+                ],
+                reasoning={"effort": "low"},
+                text={"verbosity": "low"},
+                max_output_tokens=self.settings.max_tokens,
+            )
+            # Extract text from output items - GPT-5 returns ResponseOutputMessage with nested content
+            json_content = ""
+            for item in response.output:
+                # Skip reasoning items
+                if hasattr(item, 'type') and item.type == 'reasoning':
+                    continue
+
+                # Check for message type with content array
+                if hasattr(item, 'type') and item.type == 'message':
+                    if hasattr(item, 'content') and isinstance(item.content, list):
+                        for content_item in item.content:
+                            # Look for output_text type
+                            if hasattr(content_item, 'type') and content_item.type == 'output_text':
+                                if hasattr(content_item, 'text') and content_item.text:
+                                    json_content = content_item.text
+                                    break
+                        if json_content:
+                            break
+
+                # Fallback: check for direct content attribute (older format)
+                if hasattr(item, 'content') and isinstance(item.content, str):
+                    json_content = item.content
+                    break
+
+            if not json_content:
+                raise ValueError(f"No text content in response. Status: {response.status}, Output items: {[item.type for item in response.output if hasattr(item, 'type')]}")
+
+            parsed_data = self._parse_response_json(json_content.strip())
+            return parsed_data
+
+        # Chat Completions API for non-GPT-5 models
         kwargs: Dict[str, Any] = {
             "model": model_name,
             "messages": [
@@ -82,10 +137,6 @@ class OpenAIService(BaseLLMService):
             ],
             "temperature": self.settings.temperature,
         }
-        if self._is_gpt5_family(model_name):
-            kwargs["reasoning_effort"] = "low"
-            if self.settings.max_tokens:
-                kwargs["max_completion_tokens"] = self.settings.max_tokens
         if self._is_json_mode_supported(model_name):
             kwargs["response_format"] = {"type": "json_object"}
 
@@ -95,7 +146,74 @@ class OpenAIService(BaseLLMService):
         return parsed_data
     
     async def _single_image_call(self, base64_images: List[str], next_page_hint: str | None) -> Dict[str, Any]:
-        # Prepare messages with images
+        model_name = self.settings.llm_model_name
+
+        if self._is_gpt5_family(model_name):
+            # GPT-5 uses the Responses API with image support
+            system_prompt = self._get_parsing_prompt()
+            text_prompt = (
+                "Parse this bank statement from the provided images:" if not next_page_hint else
+                f"Continue parsing this bank statement starting from: {next_page_hint}"
+            )
+
+            # Build content array with images first, then text (per best practices)
+            content_parts = []
+            for base64_image in base64_images:
+                content_parts.append({
+                    "type": "input_image",
+                    "image_url": f"data:image/png;base64,{base64_image}",
+                    "detail": "auto"
+                })
+            # Add text after images for better results
+            content_parts.append({
+                "type": "input_text",
+                "text": f"{system_prompt}\n\n{text_prompt}"
+            })
+
+            response = self.client.responses.create(
+                model=model_name,
+                input=[
+                    {
+                        "role": "user",
+                        "content": content_parts
+                    }
+                ],
+                reasoning={"effort": "low"},
+                text={"verbosity": "low"},
+                max_output_tokens=self.settings.max_tokens,
+            )
+            print(response)
+            # Extract text from output items - GPT-5 returns ResponseOutputMessage with nested content
+            json_content = ""
+            for item in response.output:
+                # Skip reasoning items
+                if hasattr(item, 'type') and item.type == 'reasoning':
+                    continue
+
+                # Check for message type with content array
+                if hasattr(item, 'type') and item.type == 'message':
+                    if hasattr(item, 'content') and isinstance(item.content, list):
+                        for content_item in item.content:
+                            # Look for output_text type
+                            if hasattr(content_item, 'type') and content_item.type == 'output_text':
+                                if hasattr(content_item, 'text') and content_item.text:
+                                    json_content = content_item.text
+                                    break
+                        if json_content:
+                            break
+
+                # Fallback: check for direct content attribute (older format)
+                if hasattr(item, 'content') and isinstance(item.content, str):
+                    json_content = item.content
+                    break
+
+            if not json_content:
+                raise ValueError(f"No text content in response. Status: {response.status}, Output items: {[item.type for item in response.output if hasattr(item, 'type')]}")
+
+            parsed_data = self._parse_response_json(json_content.strip())
+            return parsed_data
+
+        # Chat Completions API for non-GPT-5 models
         messages = [
             {"role": "system", "content": self._get_parsing_prompt()}
         ]
@@ -112,16 +230,11 @@ class OpenAIService(BaseLLMService):
             })
         messages.append({"role": "user", "content": user_content})
 
-        model_name = self.settings.llm_model_name
         kwargs: Dict[str, Any] = {
             "model": model_name,
             "messages": messages,
             "temperature": self.settings.temperature,
         }
-        if self._is_gpt5_family(model_name):
-            kwargs["reasoning_effort"] = "low"
-            if self.settings.max_tokens:
-                kwargs["max_completion_tokens"] = self.settings.max_tokens
         if self._is_json_mode_supported(model_name):
             kwargs["response_format"] = {"type": "json_object"}
 
