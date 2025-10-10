@@ -1,5 +1,5 @@
 import os
-from pydantic import BaseSettings
+from pydantic_settings import BaseSettings
 from typing import List
 
 
@@ -18,16 +18,23 @@ class Settings(BaseSettings):
     
     # File Processing Configuration
     max_file_size_mb: int = 10
-    allowed_file_types: List[str] = ["pdf"]
+    allowed_file_types: str = "pdf"  # Changed to string, will split later
     
     # LLM Configuration
-    model_name: str = "gpt-4-vision-preview"
+    llm_model_name: str = "gpt-4-vision-preview"  # Renamed to avoid conflict
     max_tokens: int = 4000
     temperature: float = 0.1
     
-    class Config:
-        env_file = ".env"
-        env_file_encoding = "utf-8"
+    model_config = {
+        "env_file": ".env",
+        "env_file_encoding": "utf-8",
+        "protected_namespaces": ('settings_',)  # Fix protected namespace warning
+    }
+    
+    @property
+    def allowed_file_types_list(self) -> List[str]:
+        """Convert allowed_file_types string to list"""
+        return [ft.strip() for ft in self.allowed_file_types.split(",")]
 
 
 # Singleton pattern for settings

@@ -1,0 +1,67 @@
+version: '3.8'
+
+services:
+  # Production service
+  bankparser:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "8000:8000"
+    environment:
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - DEBUG=False
+      - HOST=0.0.0.0
+      - PORT=8000
+    env_file:
+      - .env
+    volumes:
+      - ./uploads:/app/uploads  # For temporary file storage
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/api/v1/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  # Development service
+  bankparser-dev:
+    build:
+      context: .
+      dockerfile: Dockerfile.dev
+    ports:
+      - "8001:8000"
+    environment:
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - DEBUG=True
+      - HOST=0.0.0.0
+      - PORT=8000
+    env_file:
+      - .env
+    volumes:
+      - .:/app  # Mount entire directory for development
+      - /app/__pycache__  # Exclude cache
+      - /app/.pytest_cache  # Exclude pytest cache
+    restart: unless-stopped
+    profiles:
+      - dev
+
+  # Nginx reverse proxy (optional)
+  nginx:
+    image: nginx:alpine
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./ssl:/etc/nginx/ssl:ro  # For SSL certificates
+    depends_on:
+      - bankparser
+    restart: unless-stopped
+    profiles:
+      - production
+
+volumes:
+  uploads:
+    driver: local

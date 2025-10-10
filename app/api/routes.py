@@ -25,7 +25,7 @@ class LLMProvider(str, Enum):
 def get_parser_service(llm_provider: LLMProvider, use_vision: bool = True):
     """Get parser service based on LLM provider"""
     if llm_provider == LLMProvider.openai:
-        return BankStatementParserFactory.create_vision_parser() if use_vision else BankStatementParserFactory.create_text_parser()
+        return BankStatementParserFactory.create_openai_vision_parser() if use_vision else BankStatementParserFactory.create_openai_text_parser()
     elif llm_provider == LLMProvider.claude:
         return BankStatementParserFactory.create_claude_parser()
     elif llm_provider == LLMProvider.gemini:

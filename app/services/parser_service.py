@@ -1,12 +1,19 @@
+"""
+Main bank statement parser service that orchestrates the entire parsing workflow
+"""
+
 from typing import BinaryIO
 import time
 from io import BytesIO
 from fastapi import UploadFile
 
 from app.models import BankStatement, ParsedResponse
-from app.services.pdf_processor import PDFProcessorFactory, PDFProcessorInterface
-from app.services.llm_service import LLMServiceFactory, LLMServiceInterface
-from app.services.file_validator import FileValidationService, PDFFileValidator
+from app.services.pdf.interface import PDFProcessorInterface
+from app.services.pdf.factory import PDFProcessorFactory
+from app.services.llm.interface import LLMServiceInterface
+from app.services.llm.factory import LLMServiceFactory
+from app.services.validation.validation_service import FileValidationService
+from app.services.validation.factory import FileValidationFactory
 
 
 class BankStatementParserService:
@@ -24,7 +31,7 @@ class BankStatementParserService:
         # Dependency Injection (Dependency Inversion Principle)
         self.pdf_processor = pdf_processor or PDFProcessorFactory.create_image_processor()
         self.llm_service = llm_service or LLMServiceFactory.create_openai_service()
-        self.file_validator = file_validator or FileValidationService(PDFFileValidator())
+        self.file_validator = file_validator or FileValidationFactory.create_default_validation_service()
     
     async def parse_statement(self, file: UploadFile, use_vision: bool = True) -> ParsedResponse:
         """
@@ -93,16 +100,16 @@ class BankStatementParserFactory:
     """Factory for creating parser service instances (Factory Pattern)"""
     
     @staticmethod
-    def create_vision_parser() -> BankStatementParserService:
-        """Create parser with vision capabilities (OpenAI)"""
+    def create_openai_vision_parser() -> BankStatementParserService:
+        """Create parser with OpenAI vision capabilities"""
         return BankStatementParserService(
             pdf_processor=PDFProcessorFactory.create_image_processor(),
             llm_service=LLMServiceFactory.create_openai_service()
         )
     
     @staticmethod
-    def create_text_parser() -> BankStatementParserService:
-        """Create parser with text extraction capabilities (OpenAI)"""
+    def create_openai_text_parser() -> BankStatementParserService:
+        """Create parser with OpenAI text extraction capabilities"""
         return BankStatementParserService(
             pdf_processor=PDFProcessorFactory.create_text_processor(),
             llm_service=LLMServiceFactory.create_openai_service()
@@ -127,12 +134,14 @@ class BankStatementParserFactory:
     @staticmethod
     def create_custom_parser(
         pdf_processor: PDFProcessorInterface,
-        llm_service: LLMServiceInterface
+        llm_service: LLMServiceInterface,
+        file_validator: FileValidationService = None
     ) -> BankStatementParserService:
         """Create parser with custom components"""
         return BankStatementParserService(
             pdf_processor=pdf_processor,
-            llm_service=llm_service
+            llm_service=llm_service,
+            file_validator=file_validator
         )
     
     @staticmethod
