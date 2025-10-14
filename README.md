@@ -34,15 +34,28 @@ A FastAPI-based API for parsing bank statements from PDF files using OpenAI's GP
 
 4. Run the application:
    ```bash
-   python run.py
+   python main.py
    ```
-   
+
    Or directly:
    ```bash
    uvicorn main:app --reload
    ```
 
 5. Open your browser to `http://localhost:8000/docs` to see the API documentation
+
+### Docker
+
+```bash
+# Build and run
+docker-compose up --build
+
+# Or manually
+docker build -t bank-parser .
+docker run -p 8000:8000 --env-file .env bank-parser
+```
+
+See [docs/DOCKER.md](docs/DOCKER.md) for comprehensive Docker deployment guide.
 
 ## API Usage
 
@@ -53,10 +66,11 @@ A FastAPI-based API for parsing bank statements from PDF files using OpenAI's GP
 **Parameters**:
 - `file`: PDF file (required)
 - `use_vision`: Boolean (optional, default: true)
+- `llm_provider`: String (optional, default: "openai") - Choose from: openai, claude, gemini
 
 **Example using curl**:
 ```bash
-curl -X POST "http://localhost:8000/api/v1/parse-statement?use_vision=true" \
+curl -X POST "http://localhost:8000/api/v1/parse-statement?use_vision=true&llm_provider=openai" \
      -H "accept: application/json" \
      -H "Content-Type: multipart/form-data" \
      -F "file=@bank_statement.pdf"
@@ -91,40 +105,6 @@ curl -X POST "http://localhost:8000/api/v1/parse-statement?use_vision=true" \
 }
 ```
 
-## Architecture
-
-This project follows SOLID principles:
-
-- **Single Responsibility**: Each class has one reason to change
-- **Open/Closed**: Open for extension, closed for modification
-- **Liskov Substitution**: Subtypes must be substitutable for their base types
-- **Interface Segregation**: Many client-specific interfaces
-- **Dependency Inversion**: Depend on abstractions, not concretions
-
-### Project Structure
-
-```
-BankParser/
-├── app/
-│   ├── __init__.py
-│   ├── models.py              # Data models (Pydantic)
-│   ├── config.py              # Configuration settings
-│   ├── api/
-│   │   ├── __init__.py
-│   │   └── routes.py          # API routes
-│   └── services/
-│       ├── __init__.py
-│       ├── pdf_processor.py   # PDF processing logic
-│       ├── llm_service.py     # LLM integration
-│       ├── file_validator.py  # File validation
-│       └── parser_service.py  # Main parsing orchestration
-├── main.py                    # FastAPI app
-├── run.py                     # Application runner
-├── requirements.txt           # Dependencies
-├── .env                       # Environment variables
-└── README.md                  # This file
-```
-
 ## Configuration
 
 Edit `.env` file to configure:
@@ -132,6 +112,10 @@ Edit `.env` file to configure:
 ```env
 # OpenAI API Configuration
 OPENAI_API_KEY=your_openai_api_key_here
+
+# Optional: Other LLM providers
+CLAUDE_API_KEY=your_claude_api_key_here
+GEMINI_API_KEY=your_gemini_api_key_here
 
 # Application Configuration
 APP_NAME=Bank Statement Parser
@@ -143,7 +127,7 @@ PORT=8000
 MAX_FILE_SIZE_MB=10
 
 # LLM Configuration
-MODEL_NAME=gpt-4-vision-preview
+MODEL_NAME=gpt-4o
 MAX_TOKENS=4000
 TEMPERATURE=0.1
 ```
@@ -159,31 +143,77 @@ The API works with bank statements from major banks including:
 - US Bank
 - And many more...
 
-## Error Handling
+## Documentation
 
-The API includes comprehensive error handling for:
-- Invalid file types
-- File size limits
-- Malformed PDFs
-- API rate limits
-- Processing failures
+- **[CLAUDE.md](docs/CLAUDE.md)** - Comprehensive guide for AI assistants working with this codebase
+- **[ADDING_NEW_LLMS.md](docs/ADDING_NEW_LLMS.md)** - Developer guide for integrating new LLM providers
+- **[DOCKER.md](docs/DOCKER.md)** - Complete Docker deployment guide with examples
+- **[TROUBLESHOOTING.md](docs/TROUBLESHOOTING.md)** - Common issues and solutions
 
-## Security
+## Architecture
 
-- File type validation
-- File size limits
-- Content validation
-- Error message sanitization
-- CORS configuration
+This project follows SOLID principles with a clean, extensible architecture:
+
+- **Single Responsibility**: Each class has one reason to change
+- **Open/Closed**: Open for extension, closed for modification
+- **Liskov Substitution**: Subtypes must be substitutable for their base types
+- **Interface Segregation**: Many client-specific interfaces
+- **Dependency Inversion**: Depend on abstractions, not concretions
+
+### Project Structure
+
+```
+BankStatementParser/
+├── app/
+│   ├── api/
+│   │   └── routes.py          # API endpoints
+│   ├── services/
+│   │   ├── parser_service.py  # Main orchestration
+│   │   ├── llm/               # LLM service implementations
+│   │   │   ├── interface.py
+│   │   │   ├── base.py        # Shared LLM logic
+│   │   │   ├── openai_service.py
+│   │   │   ├── claude_service.py
+│   │   │   └── gemini_service.py
+│   │   ├── pdf/               # PDF processing
+│   │   │   ├── interface.py
+│   │   │   ├── text_extractor.py
+│   │   │   └── image_extractor.py
+│   │   └── validation/        # File validation
+│   ├── models.py              # Data models (Pydantic)
+│   └── config.py              # Configuration settings
+├── docs/                      # Documentation
+├── main.py                    # FastAPI app
+└── requirements.txt           # Dependencies
+```
 
 ## Development
 
 To extend the application:
 
 1. **Add new PDF processors**: Implement `PDFProcessorInterface`
-2. **Add new LLM services**: Implement `LLMServiceInterface`
-3. **Add new validators**: Implement `FileValidatorInterface`
+2. **Add new LLM services**: Implement `LLMServiceInterface` (see [docs/ADDING_NEW_LLMS.md](docs/ADDING_NEW_LLMS.md))
+3. **Add new validators**: Implement validation interfaces
 4. **Modify parsing logic**: Edit `BankStatementParserService`
+
+### Development Commands
+
+```bash
+# Install dev dependencies
+pip install -r requirements-dev.txt
+
+# Format code
+black .
+isort .
+
+# Lint
+flake8 app/
+mypy app/
+
+# Run tests
+pytest
+pytest --cov=app --cov-report=html
+```
 
 ## License
 

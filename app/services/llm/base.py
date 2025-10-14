@@ -4,74 +4,138 @@ Base helpers for LLM services: shared prompt and robust JSON parsing.
 
 from __future__ import annotations
 
-from typing import Dict, Any, Optional, List
+import hashlib
 import json
 import re
-import hashlib
+from abc import abstractmethod
+from typing import Any, Dict, List, Optional
+
+from app.models import BankStatement, Transaction
 
 from .interface import LLMServiceInterface
-from app.models import BankStatement, Transaction
-from abc import abstractmethod
 
 
 class BaseLLMService(LLMServiceInterface):
-    """Base class providing common helpers for LLM services.
+    """Base class providing common LLM parsing logic using the Template Method pattern.
 
-    Concrete subclasses must implement parse_text_statement and parse_image_statement.
+    This class implements the LLMServiceInterface by handling:
+    - JSON parsing with multiple fallback strategies
+    - Multi-page pagination and continuation
+    - Transaction merging and deduplication
+    - Conversion to BankStatement models
+
+    Subclasses MUST implement these provider-specific methods:
+    - _single_text_call(text_content, next_page_hint) -> Dict[str, Any]
+    - _single_image_call(base64_images, next_page_hint) -> Dict[str, Any]
+
+    Subclasses should NOT override parse_text_statement() or parse_image_statement()
+    unless they need completely different pagination logic.
+
+    Example:
+        class MyLLMService(BaseLLMService):
+            async def _single_text_call(self, text_content: str, next_page_hint: str | None):
+                response = await my_llm_api.call(text_content)
+                return self._parse_response_json(response.text)
+
+            async def _single_image_call(self, base64_images: List[str], next_page_hint: str | None):
+                response = await my_llm_api.call_vision(base64_images)
+                return self._parse_response_json(response.text)
     """
 
     # ---------- Prompt ----------
-    def _get_parsing_prompt(self) -> str:
-        """Standard parsing prompt used across providers for consistent outputs."""
-        return (
-            """
-        You are a bank statement parsing expert. Extract and standardize the following bank statement data into the specified JSON format.
+    def _get_base_prompt(self) -> str:
+        """Core parsing prompt shared across all LLM providers.
 
-        Required fields:
-        - account_holder: Full name of the account holder
-        - bank_name: Name of the bank
-        - account_number: Account number (keep last 4 digits visible, mask others with *)
-        - statement_period: Object with start_date and end_date (YYYY-MM-DD format)
-        - opening_balance: Starting balance as a number
-        - closing_balance: Ending balance as a number
-        - transactions: Array of transaction objects
-        - currency: Currency code (default USD)
-
-        For each transaction, include:
-        - date: Transaction date (YYYY-MM-DD format)
-        - description: Transaction description
-        - amount: Transaction amount (positive number)
-        - type: "credit" or "debit"
-        - category: Transaction category (optional)
-        - balance: Running balance after transaction (optional)
-
-        Return ONLY valid JSON (no markdown code fences, no comments, no explanations), do not use "\n" in the JSON.
-        Do not include trailing commas. Use numbers, not strings, for amounts/balances.
-        If there is a page that is sent and does not look like a statement, example(detail pages, contact information pages, etc.) from the bank, do not send false data, just send transactions as [].
-        Schema:
-        {
-            "account_holder": string,
-            "bank_name": string,
-            "account_number": string,  // last 4 visible, others masked with *
-            "statement_period": { "start_date": "YYYY-MM-DD", "end_date": "YYYY-MM-DD" },
-            "opening_balance": number,
-            "closing_balance": number,
-            "transactions": [
-                { "date": "YYYY-MM-DD", "description": string, "amount": number, "type": "credit"|"debit", "category": string? }
-            ],
-            "currency": "USD",
-            "has_more": boolean,
-            "next_page_hint": string?
-        }
-        Output the JSON object only.
+        This contains the universal schema, requirements, and banking rules.
+        Do NOT include provider-specific instructions here.
         """
-        ).strip()
+        return """
+You are a bank statement parsing expert. Extract and standardize the following bank statement data into the specified JSON format.
+
+Required fields:
+- account_holder: Full name of the account holder
+- bank_name: Name of the bank
+- account_number: Account number (keep last 4 digits visible, mask others with *)
+- statement_period: Object with start_date and end_date (YYYY-MM-DD format)
+- opening_balance: Starting balance as a number
+- closing_balance: Ending balance as a number
+- transactions: Array of transaction objects
+- currency: Currency code (default USD)
+
+For each transaction, include:
+- date: Transaction date (YYYY-MM-DD format)
+- description: Transaction description
+- amount: Transaction amount (positive number)
+- type: "credit" or "debit"
+- category: Transaction category (optional)
+- balance: Running balance after transaction (optional)
+
+UNIVERSAL PARSING RULES:
+- Return ONLY valid JSON (no markdown code fences, no comments, no explanations)
+- Do not use "\\n" in the JSON
+- Do not include trailing commas
+- Use numbers, not strings, for amounts/balances
+- If page is not a statement (detail pages, contact pages, etc.), return transactions: []
+
+SPECIAL BANKING NOTATIONS:
+- CR/DB suffixes: Some banks use 10000CR (credit) or 5000DB (debit)
+  Example: "10000CR" means amount: 10000, type: "credit"
+
+VALIDATION REQUIREMENTS:
+- Balance validation: Each transaction balance should match previous_balance +/- amount
+- Total validation: closing_balance should equal opening_balance + net_transactions
+
+Schema:
+{
+    "account_holder": string,
+    "bank_name": string,
+    "account_number": string,  // last 4 visible, others masked with *
+    "statement_period": { "start_date": "YYYY-MM-DD", "end_date": "YYYY-MM-DD" },
+    "opening_balance": number,
+    "closing_balance": number,
+    "transactions": [
+        { "date": "YYYY-MM-DD", "description": string, "amount": number, "type": "credit"|"debit", "category": string?, "balance": number? }
+    ],
+    "currency": "USD",
+    "has_more": boolean,
+    "next_page_hint": string?
+}
+
+Output the JSON object only.
+""".strip()
+
+    def _get_provider_specific_instructions(self) -> str:
+        """Provider-specific parsing instructions.
+
+        Override this in subclasses to add LLM-specific guidance.
+        Return empty string if no specific instructions needed.
+
+        Examples:
+        - OpenAI: Emphasize accuracy and completeness
+        - Claude: Encourage reasoning and confidence scores
+        - Gemini: Leverage multimodal capabilities
+        """
+        return ""
+
+    def _get_parsing_prompt(self) -> str:
+        """Get complete parsing prompt (base + provider-specific).
+
+        Do NOT override this method unless you need completely different structure.
+        Override _get_provider_specific_instructions() instead.
+        """
+        base = self._get_base_prompt()
+        provider_instructions = self._get_provider_specific_instructions()
+
+        if provider_instructions:
+            return f"{base}\n\n{provider_instructions}"
+        return base
 
     # ---------- JSON Mode Heuristic ----------
     def _is_json_mode_supported(self, model_name: str) -> bool:
         """Return True if the model likely supports response_format json_object."""
         normalized = model_name.lower()
-        return any(key in normalized for key in ["gpt-4o", "gpt-4.1", "gpt-4.1-mini"])  # expandable
+        # expandable
+        return any(key in normalized for key in ["gpt-4o", "gpt-4.1", "gpt-4.1-mini"])
 
     # ---------- JSON Parsing Helpers ----------
     def _strip_code_fences(self, content: str) -> str:
@@ -95,6 +159,7 @@ class BaseLLMService(LLMServiceInterface):
         """Remove thousands separators in unquoted numbers like 12,345.67 -> 12345.67.
         This reduces JSON parse errors when models format numbers for readability.
         """
+
         def repl(match: re.Match) -> str:
             number = match.group(0)
             return number.replace(",", "")
@@ -135,12 +200,12 @@ class BaseLLMService(LLMServiceInterface):
             else:
                 if ch == '"':
                     in_string = True
-                elif ch == '{':
+                elif ch == "{":
                     depth += 1
-                elif ch == '}':
+                elif ch == "}":
                     depth -= 1
                     if depth == 0:
-                        return content[start:idx + 1]
+                        return content[start : idx + 1]
         return None
 
     def _parse_response_json(self, raw_content: str) -> Dict[str, Any]:
@@ -165,7 +230,9 @@ class BaseLLMService(LLMServiceInterface):
                 return json.loads(fenced)
             except Exception:
                 # attempt with number normalization and trailing comma cleanup
-                fenced_norm = self._normalize_number_separators(self._remove_trailing_commas(fenced))
+                fenced_norm = self._normalize_number_separators(
+                    self._remove_trailing_commas(fenced)
+                )
                 return json.loads(fenced_norm)
 
         # Extract first JSON object and try
@@ -218,16 +285,22 @@ class BaseLLMService(LLMServiceInterface):
 
     # ---------- Pagination Support (Template Method) ----------
     @abstractmethod
-    async def _single_text_call(self, text_content: str, next_page_hint: str | None) -> Dict[str, Any]:
+    async def _single_text_call(
+        self, text_content: str, next_page_hint: str | None
+    ) -> Dict[str, Any]:
         """Perform one text-only LLM call and return parsed JSON as dict."""
         raise NotImplementedError
 
     @abstractmethod
-    async def _single_image_call(self, base64_images: List[str], next_page_hint: str | None) -> Dict[str, Any]:
+    async def _single_image_call(
+        self, base64_images: List[str], next_page_hint: str | None
+    ) -> Dict[str, Any]:
         """Perform one vision LLM call and return parsed JSON as dict."""
         raise NotImplementedError
 
-    def _merge_chunks(self, first: Dict[str, Any], nxt: Dict[str, Any]) -> Dict[str, Any]:
+    def _merge_chunks(
+        self, first: Dict[str, Any], nxt: Dict[str, Any]
+    ) -> Dict[str, Any]:
         """Merge two chunks of parsed statement data."""
         merged = dict(first)
         # Merge transactions with dedupe
@@ -263,7 +336,11 @@ class BaseLLMService(LLMServiceInterface):
         """Follow continuation hints and merge chunks up to a limit."""
         merged = dict(first_chunk)
         attempts = 0
-        while attempts < max_followups and merged.get("has_more") and merged.get("next_page_hint"):
+        while (
+            attempts < max_followups
+            and merged.get("has_more")
+            and merged.get("next_page_hint")
+        ):
             hint = merged.get("next_page_hint")
             nxt = await fetch_next(hint)
             merged = self._merge_chunks(merged, nxt)
@@ -317,5 +394,3 @@ class BaseLLMService(LLMServiceInterface):
         merged.pop("next_page_hint", None)
 
         return self._convert_to_bank_statement(merged)
-
-
