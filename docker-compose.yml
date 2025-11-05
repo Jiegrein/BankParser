@@ -1,8 +1,9 @@
-version: '3.8'
+name: bankparser
 
 services:
   # Production service
   bankparser:
+    container_name: bankparser-prod
     build:
       context: .
       dockerfile: Dockerfile
@@ -24,9 +25,12 @@ services:
       timeout: 10s
       retries: 3
       start_period: 40s
+    profiles:
+      - production
 
   # Development service
   bankparser-dev:
+    container_name: bankparser-dev
     build:
       context: .
       dockerfile: Dockerfile.dev
@@ -44,11 +48,37 @@ services:
       - /app/__pycache__  # Exclude cache
       - /app/.pytest_cache  # Exclude pytest cache
     restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy  # Wait for postgres to be healthy before starting
+    profiles:
+      - dev
+
+  # PostgreSQL Database (dev only)
+  postgres:
+    image: postgres:16-alpine
+    container_name: bankparser-postgres
+    environment:
+      - POSTGRES_USER=${POSTGRES_USER:-postgres}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-postgres}
+      - POSTGRES_DB=${POSTGRES_DB:-bankparser}
+      - PGDATA=/var/lib/postgresql/data/pgdata
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-postgres}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
     profiles:
       - dev
 
   # Nginx reverse proxy (optional)
   nginx:
+    container_name: bankparser-nginx
     image: nginx:alpine
     ports:
       - "80:80"
@@ -64,4 +94,6 @@ services:
 
 volumes:
   uploads:
+    driver: local
+  postgres_data:
     driver: local

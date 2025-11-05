@@ -9,6 +9,13 @@ class Settings(BaseSettings):
     # OpenAI Configuration
     openai_api_key: str
 
+    # PostgreSQL Configuration (required from .env)
+    postgres_user: str
+    postgres_password: str
+    postgres_host: str
+    postgres_port: int
+    postgres_db: str
+
     # Application Configuration
     app_name: str = "Bank Statement Parser"
     app_version: str = "1.0.0"
