@@ -6,6 +6,13 @@ import sys
 
 from app.config import get_settings
 from app.api.routes import router
+from app.core.exceptions import register_exception_handlers
+from app.features.projects.routes import router as projects_router
+from app.features.accounts.routes import router as accounts_router
+from app.features.categories.routes import router as categories_router
+from app.features.statement_files.routes import router as statement_files_router
+from app.features.statement_entries.routes import router as statement_entries_router
+from app.features.entry_splits.routes import router as entry_splits_router
 
 # Configure logging
 logging.basicConfig(
@@ -68,19 +75,15 @@ app.add_middleware(
 
 # Include routes
 app.include_router(router)
+app.include_router(projects_router)
+app.include_router(accounts_router)
+app.include_router(categories_router)
+app.include_router(statement_files_router)
+app.include_router(statement_entries_router)
+app.include_router(entry_splits_router)
 
-# Global exception handler
-@app.exception_handler(Exception)
-async def global_exception_handler(request, exc):
-    logger.error(f"Global exception: {str(exc)}")
-    return JSONResponse(
-        status_code=500,
-        content={
-            "success": False,
-            "error": "Internal server error",
-            "detail": str(exc) if settings.debug else "An unexpected error occurred"
-        }
-    )
+# Register global exception handlers
+register_exception_handlers(app)
 
 # Root endpoint
 @app.get("/", summary="API Root", tags=["Root"])
