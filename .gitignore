@@ -82,3 +82,6 @@ docs/_build/
 
 # FastAPI
 .pytest_cache
+docs/erd.jpeg
+docs/Chats.txt
+docs/REAMS_Schema.jpeg

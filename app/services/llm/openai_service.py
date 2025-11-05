@@ -2,8 +2,8 @@
 OpenAI GPT service implementation
 """
 
-from typing import Any, Dict, List
 import logging
+from typing import Any, Dict, List
 
 import openai
 
@@ -103,7 +103,9 @@ Double-check your extraction before returning the result.
                 )
 
             logger.debug(
-                f"GPT-5 text parsing - Extracted {len(json_content)} characters from text content, "
+                f"GPT-5 text parsing - Extracted {
+                    len(json_content)
+                } characters from text content, "
                 f"Preview: {json_content[:150]}..."
             )
 
@@ -137,7 +139,9 @@ Double-check your extraction before returning the result.
             f"GPT-4 text API response - "
             f"Model: {response.model}, "
             f"Finish reason: {response.choices[0].finish_reason}, "
-            f"Tokens used: {response.usage.total_tokens if hasattr(response, 'usage') else 'N/A'}, "
+            f"Tokens used: {
+                response.usage.total_tokens if hasattr(response, 'usage') else 'N/A'
+            }, "
             f"Content length: {len(json_content)} chars, "
             f"Preview: {json_content[:150]}..."
         )
@@ -187,7 +191,9 @@ Double-check your extraction before returning the result.
                 f"GPT-5 vision API response - Status: {response.status}, "
                 f"Model: {model_name}, "
                 f"Images processed: {len(base64_images)}, "
-                f"Output types: {[item.type for item in response.output if hasattr(item, 'type')]}"
+                f"Output types: {
+                    [item.type for item in response.output if hasattr(item, 'type')]
+                }"
             )
 
             # Extract text from output items - GPT-5 returns ResponseOutputMessage with nested content
@@ -227,7 +233,9 @@ Double-check your extraction before returning the result.
                 )
 
             logger.debug(
-                f"GPT-5 vision parsing - Extracted {len(json_content)} characters from vision response, "
+                f"GPT-5 vision parsing - Extracted {
+                    len(json_content)
+                } characters from vision response, "
                 f"Preview: {json_content[:150]}..."
             )
 
@@ -272,7 +280,9 @@ Double-check your extraction before returning the result.
             f"Model: {response.model}, "
             f"Images: {len(base64_images)}, "
             f"Finish reason: {response.choices[0].finish_reason}, "
-            f"Tokens used: {response.usage.total_tokens if hasattr(response, 'usage') else 'N/A'}, "
+            f"Tokens used: {
+                response.usage.total_tokens if hasattr(response, 'usage') else 'N/A'
+            }, "
             f"Content preview: {json_content[:200]}..."
         )
 
