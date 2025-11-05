@@ -32,6 +32,10 @@ RUN pip install --no-cache-dir --upgrade pip && \
 # Copy application code
 COPY . .
 
+# Copy and setup entrypoint script for auto-migrations (DEV ONLY)
+COPY docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh
+RUN chmod +x /usr/local/bin/docker-entrypoint.sh
+
 # Create non-root user
 RUN useradd --create-home --shell /bin/bash appuser && \
     chown -R appuser:appuser /app
@@ -39,6 +43,9 @@ USER appuser
 
 # Expose port
 EXPOSE 8000
+
+# Set entrypoint to run migrations before starting app (DEV ONLY)
+ENTRYPOINT ["docker-entrypoint.sh"]
 
 # Development command with reload
 CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000", "--reload"]
