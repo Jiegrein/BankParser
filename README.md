@@ -4,13 +4,28 @@ A FastAPI-based API for parsing bank statements from PDF files using OpenAI's GP
 
 ## Features
 
+### AI-Powered Statement Parsing
 - 📄 **PDF Processing**: Upload PDF bank statements from any bank
 - 🤖 **AI-Powered**: Uses GPT-4 Vision for accurate parsing
 - 🏛️ **Multi-Bank Support**: Works with statements from different banks
 - 📊 **Standardized Output**: Consistent JSON format regardless of source bank
 - ⚡ **Fast Processing**: Quick turnaround time
-- 🔒 **Secure**: File validation and error handling
+
+### Complete CRUD APIs
+- 🏢 **Projects Management**: CRUD for real estate projects
+- 🏦 **Bank Accounts**: Manage accounts under projects
+- 🏷️ **Categories**: Transaction categorization with regex matching
+- 📁 **Statement Files**: Track uploaded PDF files
+- 💰 **Transactions**: Individual statement entries with splits
+- 🔍 **Advanced Filtering**: Search, pagination, and multi-field filtering
+
+### Architecture & Infrastructure
+- 🗄️ **PostgreSQL Database**: Full relational database with migrations
+- 🐳 **Docker Support**: Production & dev containers with auto-migrations
+- 🔒 **Global Exception Handling**: Consistent error responses
+- 🧪 **Comprehensive Tests**: 132+ passing tests
 - 🏗️ **SOLID Principles**: Clean, maintainable architecture
+- 📝 **API Documentation**: Auto-generated OpenAPI/Swagger docs
 
 ## Quick Start
 
@@ -23,21 +38,25 @@ A FastAPI-based API for parsing bank statements from PDF files using OpenAI's GP
 
 1. Clone or download this repository
 2. Install dependencies:
+
    ```bash
    pip install -r requirements.txt
    ```
 
 3. Set up environment variables in `.env`:
+
    ```
    OPENAI_API_KEY=your_openai_api_key_here
    ```
 
 4. Run the application:
+
    ```bash
    python main.py
    ```
 
    Or directly:
+
    ```bash
    uvicorn main:app --reload
    ```
@@ -64,11 +83,13 @@ See [docs/DOCKER.md](docs/DOCKER.md) for comprehensive Docker deployment guide.
 **Endpoint**: `POST /api/v1/parse-statement`
 
 **Parameters**:
+
 - `file`: PDF file (required)
 - `use_vision`: Boolean (optional, default: true)
 - `llm_provider`: String (optional, default: "openai") - Choose from: openai, claude, gemini
 
 **Example using curl**:
+
 ```bash
 curl -X POST "http://localhost:8000/api/v1/parse-statement?use_vision=true&llm_provider=openai" \
      -H "accept: application/json" \
@@ -77,6 +98,7 @@ curl -X POST "http://localhost:8000/api/v1/parse-statement?use_vision=true&llm_p
 ```
 
 **Response Format**:
+
 ```json
 {
   "success": true,
@@ -88,13 +110,13 @@ curl -X POST "http://localhost:8000/api/v1/parse-statement?use_vision=true&llm_p
       "start_date": "2024-01-01",
       "end_date": "2024-01-31"
     },
-    "opening_balance": 2500.00,
-    "closing_balance": 2750.00,
+    "opening_balance": 2500.0,
+    "closing_balance": 2750.0,
     "transactions": [
       {
         "date": "2024-01-05",
         "description": "Direct Deposit - Salary",
-        "amount": 3000.00,
+        "amount": 3000.0,
         "type": "credit",
         "category": "income"
       }
@@ -104,6 +126,72 @@ curl -X POST "http://localhost:8000/api/v1/parse-statement?use_vision=true&llm_p
   "processing_time": 5.23
 }
 ```
+
+## CRUD API Endpoints
+
+The application provides comprehensive REST APIs for managing projects, accounts, and transactions:
+
+### Projects API
+```bash
+POST   /api/v1/projects          # Create project
+GET    /api/v1/projects          # List projects (paginated)
+GET    /api/v1/projects/{id}     # Get project by ID
+PUT    /api/v1/projects/{id}     # Update project
+DELETE /api/v1/projects/{id}     # Soft delete project
+```
+
+### Bank Accounts API
+```bash
+POST   /api/v1/accounts          # Create account
+GET    /api/v1/accounts          # List accounts (paginated)
+GET    /api/v1/accounts/{id}     # Get account by ID
+PUT    /api/v1/accounts/{id}     # Update account
+DELETE /api/v1/accounts/{id}     # Delete account
+```
+
+### Categories API
+```bash
+POST   /api/v1/categories        # Create category
+GET    /api/v1/categories        # List categories (paginated)
+GET    /api/v1/categories/{id}   # Get category by ID
+PUT    /api/v1/categories/{id}   # Update category
+DELETE /api/v1/categories/{id}   # Soft delete category
+```
+
+### Statement Files API
+```bash
+POST   /api/v1/statement-files           # Create statement file
+GET    /api/v1/statement-files           # List files (paginated)
+GET    /api/v1/statement-files/{id}      # Get file by ID
+PUT    /api/v1/statement-files/{id}      # Update file
+DELETE /api/v1/statement-files/{id}      # Delete file
+```
+
+### Statement Entries API
+```bash
+POST   /api/v1/statement-entries         # Create entry
+GET    /api/v1/statement-entries         # List entries (paginated, filterable)
+GET    /api/v1/statement-entries/{id}    # Get entry by ID
+PUT    /api/v1/statement-entries/{id}    # Update entry
+DELETE /api/v1/statement-entries/{id}    # Delete entry
+```
+
+### Entry Splits API
+```bash
+POST   /api/v1/entry-splits              # Create split
+GET    /api/v1/entry-splits              # List splits (paginated)
+GET    /api/v1/entry-splits/{id}         # Get split by ID
+PUT    /api/v1/entry-splits/{id}         # Update split
+DELETE /api/v1/entry-splits/{id}         # Delete split
+```
+
+**All endpoints support:**
+- Pagination (page, page_size)
+- Filtering by various fields
+- Search functionality
+- Consistent error responses
+
+**Full API documentation:** http://localhost:8000/docs
 
 ## Configuration
 
@@ -135,6 +223,7 @@ TEMPERATURE=0.1
 ## Supported Banks
 
 The API works with bank statements from major banks including:
+
 - Chase Bank
 - Bank of America
 - Wells Fargo
